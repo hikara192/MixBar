@@ -94,6 +94,17 @@ final class MixerStore {
         graph.submit(.resetAll)
     }
 
+    /// Global-hotkey action: mute every audible app if at least one is
+    /// unmuted, otherwise unmute all of them.
+    func toggleMuteAll() {
+        let rows = snapshot.rows
+        guard !rows.isEmpty else { return }
+        let shouldMute = rows.contains { !$0.desired.muted }
+        for row in rows {
+            setMuted(shouldMute, for: row.identity)
+        }
+    }
+
     func retryPermission() {
         graph.submit(.retryPermission)
     }

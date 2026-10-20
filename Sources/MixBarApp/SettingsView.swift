@@ -10,6 +10,7 @@ struct SettingsView: View {
     let store: MixerStore
     @Bindable var l10n: LocalizationStore
     @Bindable var launchAtLogin: LaunchAtLoginController
+    @Bindable var hotkeys: HotkeyStore
 
     @State private var tab: SettingsTab = .general
     @State private var showResetConfirmation = false
@@ -28,7 +29,7 @@ struct SettingsView: View {
                 .tabItem { Label(l10n.t(.tabAudio), systemImage: "waveform") }
                 .tag(SettingsTab.audio)
 
-            HotkeysSettingsView(l10n: l10n)
+            HotkeysSettingsView(hotkeys: hotkeys, l10n: l10n)
                 .tabItem { Label(l10n.t(.tabHotkeys), systemImage: "keyboard") }
                 .tag(SettingsTab.hotkeys)
 
@@ -273,32 +274,5 @@ struct SettingsView: View {
     private static var version: String {
         (Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String)
             ?? "0.1.0"
-    }
-}
-
-/// Placeholder tab; the global-shortcut implementation adds the recorder UI
-/// here and keeps the panel/settings wiring unchanged.
-struct HotkeysSettingsView: View {
-    @Bindable var l10n: LocalizationStore
-
-    var body: some View {
-        VStack(spacing: 12) {
-            Image(systemName: "keyboard")
-                .font(.system(size: 34, weight: .light))
-                .foregroundStyle(.secondary)
-                .accessibilityHidden(true)
-
-            Text(l10n.t(.hotkeysPlaceholderTitle))
-                .font(.headline)
-
-            Text(l10n.t(.hotkeysPlaceholderMessage))
-                .font(.callout)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-                .fixedSize(horizontal: false, vertical: true)
-                .frame(maxWidth: 340)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .padding(24)
     }
 }

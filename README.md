@@ -18,6 +18,8 @@ live audio: process tap, private aggregate, IOProc, buffer layout
 | `RenderCore` + slot table (RT mixing, ramps, clamp, peaks) | **real**, tested |
 | `GraphOwner` + `Reconciler` (single writer, idempotent reconcile) | **real**, tested |
 | `SettingsStore`, discovery, menu bar UI | **real**, tested |
+| Settings window, EN/RU localization, launch at login | **real** |
+| Global shortcuts (Carbon, no Accessibility permission) | **real**, tested |
 | `CoreAudioSystem` — process taps, private aggregate, IOProc | **real**, S1-validated |
 | `FakeAudioSystem` — synthetic buffers through the real render core | **real**, demo/CI engine |
 
@@ -34,6 +36,19 @@ live audio: process tap, private aggregate, IOProc, buffer layout
 Safety valve: if taps are created but deliver no audio for 6 s (the usual
 signature of denied permission), MixBar removes them, leaves audio untouched,
 and shows a "MixBar paused" banner with Settings / Retry.
+
+### Settings (gear in the panel, or ⌘,)
+
+- **General** — interface language (System / English / Русский, applied
+  instantly) and launch at login (`SMAppService`; enabled only when the app is
+  in `/Applications`).
+- **Audio** — live capture status, output device, Open System Settings / Retry,
+  and Reset all volumes (clears saved levels and releases every tap).
+- **Shortcuts** — global hotkeys with a recorder, per-action enable switch,
+  conflict/unavailable states and Restore defaults. Defaults: **⌥⌘M**
+  mute/unmute all apps, **⌥⌘R** reset all volumes. Carbon hotkeys need no
+  Accessibility or Input Monitoring permission.
+- **About** — version, engine mode and the no-driver promise.
 
 Engine override: `MIXBAR_ENGINE=fake open build/MixBar.app` runs the UI on
 synthetic audio with no permission prompt.
@@ -55,7 +70,7 @@ Engine selection: `MIXBAR_ENGINE=core|fake` (default `core`).
 ## Tests
 
 ```bash
-swift test                     # 20 tests: render math, reconciler, settings, end-to-end
+swift test                     # 45 tests: render, reconciler, settings, localization, hotkeys, end-to-end
 Scripts/check-deps.sh          # fitness functions: dependency + RT-purity checks
 ```
 
@@ -75,7 +90,9 @@ Sources/MixBarCore/
   Discovery/                   process catalog, helper grouping, exclusions
   Reconciler/                  pure desired-state planner
   Persistence/                 SettingsStore (UserDefaults, bundle-ID keyed)
-Sources/MixBarApp/             SwiftUI menu bar UI
+Sources/MixBarLocalization/    L10nKey catalog (EN/RU) + observable language store
+Sources/MixBarApp/             SwiftUI menu bar UI, Settings, launch at login
+  Hotkeys/                     Carbon global shortcuts, recorder, persistence
 Tests/MixBarTests/
 AppResources/Info.plist        LSUIElement, NSAudioCaptureUsageDescription
 Scripts/                       build-app.sh, check-deps.sh

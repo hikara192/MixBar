@@ -14,6 +14,6 @@ let package = Package(
         .executableTarget(name: "MixBarApp", dependencies: ["MixBarCore", "MixBarLocalization"]),
         // Spike S1 (throwaway): real tap + aggregate + IOProc diagnostics.
         .executableTarget(name: "MixBarSpike", dependencies: ["CAtomic"]),
-        .testTarget(name: "MixBarTests", dependencies: ["MixBarCore", "MixBarLocalization", "CAtomic"]),
+        .testTarget(name: "MixBarTests", dependencies: ["MixBarCore", "MixBarLocalization", "CAtomic", "MixBarApp"]),
     ]
 )

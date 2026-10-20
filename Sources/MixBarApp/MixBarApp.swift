@@ -1,6 +1,23 @@
+import AppKit
 import SwiftUI
 import MixBarCore
 import MixBarLocalization
+
+/// Owns the objects that must outlive a view, and starts global shortcuts once
+/// AppKit has finished launching — before the user can open the panel.
+@MainActor
+final class AppDelegate: NSObject, NSApplicationDelegate {
+    var onLaunch: (() -> Void)?
+    var onTerminate: (() -> Void)?
+
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        onLaunch?()
+    }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        onTerminate?()
+    }
+}
 
 /// Walking skeleton entry point (ARCHITECTURE.md §15).
 ///
@@ -11,7 +28,16 @@ import MixBarLocalization
 ///   RenderCore with synthetic buffers — no Core Audio, no permission prompt.
 @main
 struct MixBarApp: App {
-    private let store: MixerStore = {
+    @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
+
+    private let store: MixerStore
+    private let hotkeyManager: HotkeyManager
+
+    @State private var l10n = LocalizationStore()
+    @State private var launchAtLogin = LaunchAtLoginController()
+    @State private var hotkeys: HotkeyStore
+
+    init() {
         let raw = ProcessInfo.processInfo.environment["MIXBAR_ENGINE"] ?? "core"
         let fake = raw == "fake"
         let audio: AudioSystem = fake ? FakeAudioSystem() : CoreAudioSystem()
@@ -20,11 +46,19 @@ struct MixBarApp: App {
             : ProcessCatalog(audioSystem: audio)
         let graph = GraphOwner(audioSystem: audio, catalog: catalog,
                                settings: SettingsStore(), fakeEngine: fake)
-        return MixerStore(graph: graph)
-    }()
 
-    @State private var l10n = LocalizationStore()
-    @State private var launchAtLogin = LaunchAtLoginController()
+        let mixer = MixerStore(graph: graph)
+        let hotkeyStore = HotkeyStore()
+        let manager = HotkeyManager(store: hotkeyStore, mixer: mixer)
+
+        self.store = mixer
+        self.hotkeyManager = manager
+        self._hotkeys = State(initialValue: hotkeyStore)
+
+        // Fast paths are registered at launch, not when Settings opens.
+        appDelegate.onLaunch = { manager.start() }
+        appDelegate.onTerminate = { manager.stop() }
+    }
 
     var body: some Scene {
         MenuBarExtra("MixBar", systemImage: "slider.horizontal.3") {
@@ -33,7 +67,8 @@ struct MixBarApp: App {
         .menuBarExtraStyle(.window)
 
         Settings {
-            SettingsView(store: store, l10n: l10n, launchAtLogin: launchAtLogin)
+            SettingsView(store: store, l10n: l10n, launchAtLogin: launchAtLogin,
+                         hotkeys: hotkeys)
         }
     }
 }

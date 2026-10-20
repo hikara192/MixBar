@@ -115,8 +115,23 @@ public enum L10nKey: String, CaseIterable, Sendable {
     case aboutEngineFake
     case aboutVersion
     case aboutPromise
-    case hotkeysPlaceholderTitle
-    case hotkeysPlaceholderMessage
+    case sectionHotkeys
+    case hotkeysHint
+    case hotkeyToggleMuteAll
+    case hotkeyResetAll
+    case hotkeyStatusActive
+    case hotkeyStatusDisabled
+    case hotkeyStatusUnavailable
+    case hotkeyNotSet
+    case hotkeyUnavailableHint
+    case hotkeyRecording
+    case hotkeyClear
+    case hotkeyEnable
+    case hotkeyRecorderA11y
+    case hotkeyNeedsModifier
+    case hotkeyConflict
+    case hotkeysRestoreDefaults
+    case hotkeysRecorderHint
 }
 
 /// Pure string lookup, independent of SwiftUI, so the catalog can be tested.
@@ -214,8 +229,23 @@ public enum LocalizationCatalog {
         .aboutEngineFake: "Demo (synthetic audio)",
         .aboutVersion: "Version %@",
         .aboutPromise: "No virtual audio driver. No kernel extensions.",
-        .hotkeysPlaceholderTitle: "Global shortcuts",
-        .hotkeysPlaceholderMessage: "Shortcut configuration will appear here soon.",
+        .sectionHotkeys: "Global shortcuts",
+        .hotkeysHint: "Shortcuts work even when MixBar is in the background. Click a shortcut to record a new one.",
+        .hotkeyToggleMuteAll: "Mute or unmute all apps",
+        .hotkeyResetAll: "Reset all volumes to 100%",
+        .hotkeyStatusActive: "Active",
+        .hotkeyStatusDisabled: "Off",
+        .hotkeyStatusUnavailable: "Unavailable",
+        .hotkeyNotSet: "Not set",
+        .hotkeyUnavailableHint: "macOS or another app already uses this shortcut. Choose another one.",
+        .hotkeyRecording: "Press a shortcut…",
+        .hotkeyClear: "Clear shortcut",
+        .hotkeyEnable: "Enable shortcut",
+        .hotkeyRecorderA11y: "Shortcut for %@",
+        .hotkeyNeedsModifier: "Add at least one of ⌘, ⌥ or ⌃.",
+        .hotkeyConflict: "This shortcut is already used by “%@”.",
+        .hotkeysRestoreDefaults: "Restore defaults",
+        .hotkeysRecorderHint: "Esc cancels, Delete clears. Shortcuts need at least one of ⌘, ⌥ or ⌃.",
     ]
 
     static let russian: [L10nKey: String] = [
@@ -300,8 +330,23 @@ public enum LocalizationCatalog {
         .aboutEngineFake: "Демонстрационный (синтетический звук)",
         .aboutVersion: "Версия %@",
         .aboutPromise: "Без виртуального аудиодрайвера. Без расширений ядра.",
-        .hotkeysPlaceholderTitle: "Глобальные горячие клавиши",
-        .hotkeysPlaceholderMessage: "Настройка сочетаний появится здесь в ближайшее время.",
+        .sectionHotkeys: "Глобальные сочетания",
+        .hotkeysHint: "Сочетания работают, даже когда MixBar неактивен. Нажмите на сочетание, чтобы записать новое.",
+        .hotkeyToggleMuteAll: "Выключить или включить звук всех приложений",
+        .hotkeyResetAll: "Сбросить громкость всех приложений до 100%",
+        .hotkeyStatusActive: "Активно",
+        .hotkeyStatusDisabled: "Выключено",
+        .hotkeyStatusUnavailable: "Недоступно",
+        .hotkeyNotSet: "Не задано",
+        .hotkeyUnavailableHint: "Это сочетание уже использует macOS или другое приложение. Выберите другое.",
+        .hotkeyRecording: "Нажмите сочетание…",
+        .hotkeyClear: "Очистить сочетание",
+        .hotkeyEnable: "Включить сочетание",
+        .hotkeyRecorderA11y: "Сочетание для действия «%@»",
+        .hotkeyNeedsModifier: "Добавьте хотя бы один модификатор: ⌘, ⌥ или ⌃.",
+        .hotkeyConflict: "Это сочетание уже занято действием «%@».",
+        .hotkeysRestoreDefaults: "Вернуть по умолчанию",
+        .hotkeysRecorderHint: "Esc отменяет, Delete очищает. В сочетании нужен хотя бы один из модификаторов ⌘, ⌥ или ⌃.",
     ]
 }
 
