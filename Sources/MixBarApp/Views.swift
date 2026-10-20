@@ -1,11 +1,13 @@
 import SwiftUI
 import AppKit
 import MixBarCore
+import MixBarLocalization
 
 // MARK: - Header
 
 struct HeaderView: View {
     let snapshot: MixerSnapshot
+    let l10n: LocalizationStore
 
     var body: some View {
         HStack(spacing: 10) {
@@ -18,26 +20,28 @@ struct HeaderView: View {
             VStack(alignment: .leading, spacing: 1) {
                 Text("MixBar")
                     .font(.system(size: 13, weight: .semibold, design: .rounded))
-                Text(snapshot.outputDeviceName ?? "No output device")
+                Text(snapshot.outputDeviceName ?? l10n.t(.noOutputDevice))
                     .font(.system(size: 10.5))
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
                     .truncationMode(.middle)
-                    .accessibilityLabel("Output device: \(snapshot.outputDeviceName ?? "none")")
+                    .accessibilityLabel(l10n.t(.outputDeviceA11y,
+                                               snapshot.outputDeviceName ?? l10n.t(.noOutputDevice)))
             }
 
             Spacer(minLength: 6)
 
-            StatusBadge(engine: snapshot.engine)
+            StatusBadge(engine: snapshot.engine, l10n: l10n)
         }
     }
 }
 
 struct StatusBadge: View {
     let engine: EngineState
+    let l10n: LocalizationStore
 
     var body: some View {
-        let style = Self.style(for: engine)
+        let style = style(for: engine)
         HStack(spacing: 4) {
             Circle()
                 .fill(style.color)
@@ -51,7 +55,7 @@ struct StatusBadge: View {
         .background(Capsule().fill(style.color.opacity(0.12)))
         .help(style.help)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Engine status: \(style.title)")
+        .accessibilityLabel(l10n.t(.engineStatusA11y, style.title))
     }
 
     private struct Style {
@@ -60,23 +64,23 @@ struct StatusBadge: View {
         let help: String
     }
 
-    private static func style(for engine: EngineState) -> Style {
+    private func style(for engine: EngineState) -> Style {
         switch engine {
         case .idle:
-            Style(title: "Idle", color: .secondary,
-                  help: "Nothing is being mixed; untouched apps play at 100%")
+            Style(title: l10n.t(.statusIdle), color: .secondary,
+                  help: l10n.t(.statusHelpIdle))
         case .onboarding:
-            Style(title: "Permission", color: .orange,
-                  help: "Waiting for System Audio Recording permission")
+            Style(title: l10n.t(.statusPermission), color: .orange,
+                  help: l10n.t(.statusHelpPermission))
         case .active:
-            Style(title: "Mixing", color: .green,
-                  help: "Per-app volume is being applied")
+            Style(title: l10n.t(.statusMixing), color: .green,
+                  help: l10n.t(.statusHelpMixing))
         case .rebuilding:
-            Style(title: "Rebuilding", color: .orange,
-                  help: "Audio graph is being rebuilt")
+            Style(title: l10n.t(.statusRebuilding), color: .orange,
+                  help: l10n.t(.statusHelpRebuilding))
         case .failed:
-            Style(title: "Paused", color: .red,
-                  help: "MixBar is paused; audio plays normally")
+            Style(title: l10n.t(.statusPaused), color: .red,
+                  help: l10n.t(.statusHelpPaused))
         }
     }
 }
@@ -86,6 +90,7 @@ struct StatusBadge: View {
 struct RowView: View {
     let store: MixerStore
     let row: AppRow
+    let l10n: LocalizationStore
 
     @State private var isHovered = false
 
@@ -105,8 +110,8 @@ struct RowView: View {
                         Image(systemName: "exclamationmark.triangle.fill")
                             .font(.system(size: 9, weight: .semibold))
                             .foregroundStyle(.orange)
-                            .help("MixBar cannot control this app (\(reason)); it plays at 100%")
-                            .accessibilityLabel("Limited control: \(reason)")
+                            .help(l10n.t(.degradedHelp, reason))
+                            .accessibilityLabel(l10n.t(.degradedA11y, reason))
                     }
 
                     Spacer(minLength: 4)
@@ -128,7 +133,7 @@ struct RowView: View {
                         .frame(width: 84)
                         .disabled(row.desired.muted)
                         .opacity(row.desired.muted ? 0.45 : 1)
-                        .accessibilityLabel("Volume for \(row.displayName)")
+                        .accessibilityLabel(l10n.t(.volumeA11y, row.displayName))
                         .accessibilityValue(percentText)
 
                     muteButton
@@ -171,9 +176,13 @@ struct RowView: View {
                 .contentShape(Circle())
         }
         .buttonStyle(.plain)
-        .help(row.desired.muted ? "Unmute \(row.displayName)" : "Mute \(row.displayName)")
-        .accessibilityLabel(row.desired.muted ? "Unmute \(row.displayName)" : "Mute \(row.displayName)")
-        .accessibilityValue(row.desired.muted ? "Muted" : "Unmuted")
+        .help(row.desired.muted
+              ? l10n.t(.unmuteApp, row.displayName)
+              : l10n.t(.muteApp, row.displayName))
+        .accessibilityLabel(row.desired.muted
+                            ? l10n.t(.unmuteApp, row.displayName)
+                            : l10n.t(.muteApp, row.displayName))
+        .accessibilityValue(row.desired.muted ? l10n.t(.mutedValue) : l10n.t(.unmutedValue))
     }
 }
 
@@ -295,6 +304,8 @@ struct NoticeBanner<Actions: View>: View {
 }
 
 struct EmptyStateView: View {
+    let l10n: LocalizationStore
+
     var body: some View {
         VStack(spacing: 8) {
             ZStack {
@@ -308,9 +319,9 @@ struct EmptyStateView: View {
             .accessibilityHidden(true)
 
             VStack(spacing: 2) {
-                Text("Nothing is playing audio")
+                Text(l10n.t(.emptyTitle))
                     .font(.system(size: 12, weight: .medium))
-                Text("Apps appear here while they produce sound.")
+                Text(l10n.t(.emptyMessage))
                     .font(.system(size: 10.5))
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
@@ -326,6 +337,7 @@ struct EmptyStateView: View {
 
 struct FooterView: View {
     let store: MixerStore
+    let l10n: LocalizationStore
 
     var body: some View {
         HStack(spacing: 8) {
@@ -333,7 +345,7 @@ struct FooterView: View {
                 HStack(spacing: 4) {
                     Image(systemName: "testtube.2")
                         .font(.system(size: 8, weight: .bold))
-                    Text("FAKE ENGINE")
+                    Text(l10n.t(.fakeEngineBadge))
                         .font(.system(size: 9, weight: .bold))
                         .tracking(0.4)
                 }
@@ -341,16 +353,28 @@ struct FooterView: View {
                 .padding(.horizontal, 6)
                 .padding(.vertical, 3)
                 .background(Capsule().fill(Color.orange.opacity(0.12)))
-                .help("Walking skeleton: synthetic audio drives the real engine. Set MIXBAR_ENGINE=core after spikes.")
-                .accessibilityLabel("Fake audio engine")
+                .help(l10n.t(.fakeEngineHelp))
+                .accessibilityLabel(l10n.t(.fakeEngineA11y))
             }
 
             Spacer(minLength: 8)
 
+            SettingsLink {
+                Image(systemName: "gearshape")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 22, height: 22)
+                    .background(Circle().fill(Color.primary.opacity(0.06)))
+                    .contentShape(Circle())
+            }
+            .buttonStyle(.plain)
+            .help(l10n.t(.openSettings))
+            .accessibilityLabel(l10n.t(.openSettings))
+
             Button {
                 store.quit()
             } label: {
-                Text("Quit")
+                Text(l10n.t(.quit))
                     .font(.system(size: 10.5, weight: .medium))
                     .foregroundStyle(.secondary)
                     .padding(.horizontal, 8)
@@ -359,8 +383,8 @@ struct FooterView: View {
                     .contentShape(Capsule())
             }
             .buttonStyle(.plain)
-            .help("Quit MixBar")
-            .accessibilityLabel("Quit MixBar")
+            .help(l10n.t(.quitHelp))
+            .accessibilityLabel(l10n.t(.quitHelp))
         }
     }
 }

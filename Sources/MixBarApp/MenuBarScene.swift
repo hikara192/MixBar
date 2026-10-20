@@ -1,14 +1,17 @@
 import SwiftUI
 import MixBarCore
+import MixBarLocalization
 
 /// Menu bar panel: header with device + engine state, one row per audible app,
-/// banners for permission/engine problems, footer with engine badge and Quit.
+/// banners for permission/engine problems, footer with engine badge, settings
+/// and Quit.
 struct MenuBarScene: View {
     let store: MixerStore
+    let l10n: LocalizationStore
 
     var body: some View {
         VStack(spacing: 0) {
-            HeaderView(snapshot: store.snapshot)
+            HeaderView(snapshot: store.snapshot, l10n: l10n)
                 .padding(.horizontal, 14)
                 .padding(.top, 12)
                 .padding(.bottom, 10)
@@ -19,7 +22,7 @@ struct MenuBarScene: View {
                 banners
 
                 if store.snapshot.rows.isEmpty {
-                    EmptyStateView()
+                    EmptyStateView(l10n: l10n)
                 } else {
                     rowList
                 }
@@ -29,7 +32,7 @@ struct MenuBarScene: View {
 
             Divider()
 
-            FooterView(store: store)
+            FooterView(store: store, l10n: l10n)
                 .padding(.horizontal, 14)
                 .padding(.vertical, 8)
         }
@@ -42,12 +45,12 @@ struct MenuBarScene: View {
             NoticeBanner(
                 symbol: "exclamationmark.triangle.fill",
                 tint: .red,
-                title: "MixBar paused — audio is normal",
+                title: l10n.t(.pausedBannerTitle),
                 message: reason
             ) {
                 HStack(spacing: 6) {
-                    Button("Settings") { store.openPrivacySettings() }
-                    Button("Retry") { store.retryPermission() }
+                    Button(l10n.t(.actionSettings)) { store.openPrivacySettings() }
+                    Button(l10n.t(.actionRetry)) { store.retryPermission() }
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.small)
@@ -56,10 +59,10 @@ struct MenuBarScene: View {
             NoticeBanner(
                 symbol: "waveform.slash",
                 tint: .orange,
-                title: "No audio detected",
-                message: "If an app is silent, allow System Audio Recording for MixBar in System Settings."
+                title: l10n.t(.noAudioTitle),
+                message: l10n.t(.noAudioMessage)
             ) {
-                Button("Settings") { store.openPrivacySettings() }
+                Button(l10n.t(.actionSettings)) { store.openPrivacySettings() }
                     .buttonStyle(.bordered)
                     .controlSize(.small)
             }
@@ -70,7 +73,7 @@ struct MenuBarScene: View {
         ScrollView(.vertical) {
             LazyVStack(spacing: 1) {
                 ForEach(store.snapshot.rows) { row in
-                    RowView(store: store, row: row)
+                    RowView(store: store, row: row, l10n: l10n)
                 }
             }
             .padding(.vertical, 2)

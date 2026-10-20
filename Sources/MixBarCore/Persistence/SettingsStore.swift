@@ -44,6 +44,17 @@ public final class SettingsStore: @unchecked Sendable {
         for id in identities { setGain(id, gain) }
     }
 
+    /// Drops every remembered app, including apps that are not running right
+    /// now. The next reconcile sees unity desired state and releases all taps.
+    public func resetAll() {
+        lock.lock()
+        settings.removeAll()
+        flushTask?.cancel()
+        flushTask = nil
+        lock.unlock()
+        flushNow()
+    }
+
     /// Writes pending changes immediately (tests, shutdown).
     public func flushNow() {
         lock.lock()

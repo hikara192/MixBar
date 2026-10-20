@@ -54,4 +54,18 @@ final class SettingsStoreTests: XCTestCase {
         store.flushNow()
         XCTAssertNotNil(defaults.data(forKey: "mixbar.settings.v1"))
     }
+
+    func test_resetAllClearsEveryRememberedApp() {
+        let store = SettingsStore(defaults: defaults)
+        store.setGain(spotify, 0.3)
+        store.setMuted(chrome, true)
+        store.resetAll()
+
+        XCTAssertTrue(store.desiredState().isEmpty)
+        XCTAssertNil(store.setting(for: spotify))
+        XCTAssertNil(store.setting(for: chrome))
+
+        let reloaded = SettingsStore(defaults: defaults)
+        XCTAssertTrue(reloaded.desiredState().isEmpty)
+    }
 }

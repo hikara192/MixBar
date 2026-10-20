@@ -1,5 +1,6 @@
 import SwiftUI
 import MixBarCore
+import MixBarLocalization
 
 /// Walking skeleton entry point (ARCHITECTURE.md §15).
 ///
@@ -22,10 +23,17 @@ struct MixBarApp: App {
         return MixerStore(graph: graph)
     }()
 
+    @State private var l10n = LocalizationStore()
+    @State private var launchAtLogin = LaunchAtLoginController()
+
     var body: some Scene {
         MenuBarExtra("MixBar", systemImage: "slider.horizontal.3") {
-            MenuBarScene(store: store)
+            MenuBarScene(store: store, l10n: l10n)
         }
         .menuBarExtraStyle(.window)
+
+        Settings {
+            SettingsView(store: store, l10n: l10n, launchAtLogin: launchAtLogin)
+        }
     }
 }

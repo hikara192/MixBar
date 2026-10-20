@@ -205,6 +205,8 @@ public final class GraphOwner: @unchecked Sendable {
         case .setAllAppsGain(let gain):
             let apps = catalog.currentApps()
             settings.setAllAppsGain(apps.map(\.identity), gain)
+        case .resetAll:
+            settings.resetAll()
         case .retryPermission:
             permissionBlocked = false
             retryNotBefore = nil

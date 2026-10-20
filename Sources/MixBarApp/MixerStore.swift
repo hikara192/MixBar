@@ -89,6 +89,11 @@ final class MixerStore {
         graph.submit(.setMuted(id, muted))
     }
 
+    /// Sets every visible app back to unity and forgets all saved levels.
+    func resetAllVolumes() {
+        graph.submit(.resetAll)
+    }
+
     func retryPermission() {
         graph.submit(.retryPermission)
     }

@@ -80,6 +80,9 @@ public enum MixerIntent: Sendable {
     case setGain(AppIdentity, Float)
     case setMuted(AppIdentity, Bool)
     case setAllAppsGain(Float)
+    /// Forget every saved per-app level and unmute everything. Used by the
+    /// "Reset all volumes" action in Settings.
+    case resetAll
     case retryPermission
     case shutdown
 }
