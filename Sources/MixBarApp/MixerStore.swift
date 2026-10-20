@@ -10,6 +10,22 @@ final class MixerStore {
     let graph: GraphOwner
     private(set) var snapshot: MixerSnapshot
 
+    /// Peak levels smoothed for the UI. Raw peaks are published at audio rate
+    /// (atomic reads); the 30 Hz poll below keeps the fastest attack and lets
+    /// the bar fall with a fixed decay, which removes one-frame flicker
+    /// without adding another timer.
+    private(set) var levels: [AppIdentity: Float] = [:]
+
+    /// App icons are expensive to resolve (LaunchServices lookup + icon
+    /// extraction), so resolve once per bundle ID and keep the result.
+    /// Not observed: the cache is an implementation detail, and filling it
+    /// from a view body must not invalidate that body.
+    @ObservationIgnored private var iconCache: [String: NSImage] = [:]
+    @ObservationIgnored private var missingIcons: Set<String> = []
+
+    private static let decayPerTick: Float = 0.82
+    private static let levelFloor: Float = 0.001
+
     init(graph: GraphOwner) {
         self.graph = graph
         self.snapshot = graph.snapshot()
@@ -17,10 +33,52 @@ final class MixerStore {
         // peaks cross the boundary via atomic reads (RenderContext).
         Task { @MainActor [weak self] in
             while let self {
-                self.snapshot = self.graph.snapshot()
+                self.refresh()
                 try? await Task.sleep(for: .milliseconds(33))
             }
         }
+    }
+
+    private func refresh() {
+        snapshot = graph.snapshot()
+        updateLevels(for: snapshot.rows)
+    }
+
+    private func updateLevels(for rows: [AppRow]) {
+        var next: [AppIdentity: Float] = [:]
+        next.reserveCapacity(rows.count)
+        for row in rows {
+            let raw = min(1, max(0, graph.meter(for: row.identity)))
+            let previous = levels[row.identity] ?? 0
+            let decayed = previous * Self.decayPerTick
+            // Fast attack, smooth release: a new peak shows immediately, the
+            // fall is exponential. Below the floor the bar is simply at rest.
+            let level = max(raw, decayed)
+            next[row.identity] = level < Self.levelFloor ? 0 : level
+        }
+        levels = next
+    }
+
+    /// Smoothed 0...1 level for the row's meter.
+    func meter(for id: AppIdentity) -> Float {
+        levels[id] ?? 0
+    }
+
+    /// Bundle icon for the row, if LaunchServices can resolve it.
+    func icon(for id: AppIdentity) -> NSImage? {
+        let key = id.canonicalBundleID
+        if let cached = iconCache[key] { return cached }
+        guard !missingIcons.contains(key) else { return nil }
+        guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: key) else {
+            // Negative results are cached too: rows refresh at 30 Hz and a
+            // lookup miss is just as expensive as a hit.
+            missingIcons.insert(key)
+            return nil
+        }
+        let icon = NSWorkspace.shared.icon(forFile: url.path)
+        icon.size = NSSize(width: 64, height: 64)
+        iconCache[key] = icon
+        return icon
     }
 
     func setGain(_ gain: Float, for id: AppIdentity) {
@@ -29,10 +87,6 @@ final class MixerStore {
 
     func setMuted(_ muted: Bool, for id: AppIdentity) {
         graph.submit(.setMuted(id, muted))
-    }
-
-    func meter(for id: AppIdentity) -> Float {
-        graph.meter(for: id)
     }
 
     func retryPermission() {

@@ -45,6 +45,7 @@ swift build
 swift run MixBarApp            # fake engine; Dock icon (no bundle in dev)
 
 Scripts/build-app.sh           # -> build/MixBar.app (LSUIElement, menu bar only)
+Scripts/make-icon.sh           # regenerate AppResources/AppIcon.icns
 open build/MixBar.app
 ```
 

@@ -11,10 +11,16 @@ swift build -c "$CONFIG"
 BIN=".build/$CONFIG/MixBarApp"
 APP="build/MixBar.app"
 
+if [ ! -f AppResources/AppIcon.icns ]; then
+    echo "error: AppResources/AppIcon.icns is missing; run Scripts/make-icon.sh" >&2
+    exit 1
+fi
+
 rm -rf "$APP"
-mkdir -p "$APP/Contents/MacOS"
+mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$BIN" "$APP/Contents/MacOS/MixBarApp"
 cp AppResources/Info.plist "$APP/Contents/Info.plist"
+cp AppResources/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
 
 IDENTITY="${MIXBAR_SIGN_IDENTITY:--}"
 if [ "$IDENTITY" = "-" ]; then
