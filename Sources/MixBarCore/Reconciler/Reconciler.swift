@@ -44,32 +44,50 @@ public struct ActualGraphState: Equatable, Sendable {
 /// structural ops (createTap/destroyTap/rebuildAggregate/teardownAggregate);
 /// only cheap setTarget writes re-appear. Tested in ReconcilerTests.
 public enum Reconciler {
+    /// Deterministic: the tap set is chosen in canonical bundle-ID order, so
+    /// the same inputs always produce the same plan (and slot order matches
+    /// the aggregate tap order).
+    ///
+    /// Capacity-bounded: at most `capacity` taps exist. Apps beyond capacity
+    /// stay untouched — they play at 100% (never-silence invariant) and are
+    /// retried on later reconciles if slots free up.
     public static func plan(desired: [AppIdentity: DesiredApp],
                             audible: [AppIdentity],
-                            actual: ActualGraphState) -> [GraphOp] {
+                            actual: ActualGraphState,
+                            capacity: Int = 16) -> [GraphOp] {
         let audibleSet = Set(audible)
-        var ops: [GraphOp] = []
 
         func needsTap(_ id: AppIdentity) -> Bool {
             guard audibleSet.contains(id) else { return false }
             return !(desired[id]?.isUnity ?? true)
         }
 
-        // Taps that must go: app gone, or back to unity (ADR-002).
-        for id in actual.taps where !needsTap(id) {
+        // Keep existing taps (avoids churn), fill remaining slots in order.
+        var finalTaps = actual.taps.filter(needsTap)
+        let candidates = audibleSet
+            .filter { needsTap($0) && !actual.taps.contains($0) }
+            .sorted { $0.canonicalBundleID < $1.canonicalBundleID }
+        for id in candidates where finalTaps.count < capacity {
+            finalTaps.insert(id)
+        }
+        let finalIDs = finalTaps.sorted { $0.canonicalBundleID < $1.canonicalBundleID }
+
+        var ops: [GraphOp] = []
+        // Taps that must go: app gone, back to unity (ADR-002), or over capacity.
+        for id in actual.taps.sorted(by: { $0.canonicalBundleID < $1.canonicalBundleID })
+            where !finalTaps.contains(id) {
             ops.append(.destroyTap(id))
         }
         // Taps that must exist.
-        for id in audibleSet where needsTap(id) && !actual.taps.contains(id) {
+        for id in finalIDs where !actual.taps.contains(id) {
             ops.append(.createTap(id))
         }
 
-        let final = ActualGraphState.applying(ops, to: actual)
         if !ops.isEmpty {
-            ops.append(final.taps.isEmpty ? .teardownAggregate : .rebuildAggregate)
+            ops.append(finalIDs.isEmpty ? .teardownAggregate : .rebuildAggregate)
         }
         // Target writes for every tapped app (atomic, idempotent).
-        for id in final.taps {
+        for id in finalIDs {
             ops.append(.setTarget(id, desired[id]?.milliGain ?? 1000))
         }
         return ops

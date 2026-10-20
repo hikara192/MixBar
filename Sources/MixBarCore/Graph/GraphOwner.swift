@@ -123,7 +123,8 @@ public final class GraphOwner: @unchecked Sendable {
         let apps = catalog.currentApps()
         let desired = settings.desiredState()
         let actual = ActualGraphState(taps: Set(taps.keys), hasAggregate: aggregate != nil)
-        let ops = Reconciler.plan(desired: desired, audible: apps.map(\.identity), actual: actual)
+        let ops = Reconciler.plan(desired: desired, audible: apps.map(\.identity),
+                                  actual: actual, capacity: capacity)
         execute(ops, apps: apps)
         publishSnapshot(apps: apps, desired: desired)
     }
@@ -243,10 +244,13 @@ public final class GraphOwner: @unchecked Sendable {
     // MARK: - Slots
 
     private func assignSlots(_ identities: [AppIdentity]) {
+        // Defensive bound: the reconciler already caps the tap set, but the
+        // slot table must never be indexed past its allocation.
+        let bounded = Array(identities.prefix(capacity))
         slotLock.lock()
-        identitySlots = Dictionary(uniqueKeysWithValues: identities.enumerated().map { ($1, $0) })
+        identitySlots = Dictionary(uniqueKeysWithValues: bounded.enumerated().map { ($1, $0) })
         slotLock.unlock()
-        cat_flag_set(activeSlots, UInt32(identities.count))
+        cat_flag_set(activeSlots, UInt32(bounded.count))
     }
 
     private func clearSlots() {

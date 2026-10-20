@@ -69,4 +69,23 @@ final class ReconcilerTests: XCTestCase {
         let ops = Reconciler.plan(desired: [:], audible: [spotify, chrome], actual: ActualGraphState())
         XCTAssertTrue(ops.isEmpty)
     }
+
+    func test_tapSetIsCapacityBoundedAndDeterministic() {
+        var desired: [AppIdentity: DesiredApp] = [:]
+        var audible: [AppIdentity] = []
+        for i in 0..<20 {
+            let id = AppIdentity(canonicalBundleID: String(format: "com.example.app%02d", i))
+            desired[id] = DesiredApp(gain: 0.5)
+            audible.append(id)
+        }
+        let ops = Reconciler.plan(desired: desired, audible: audible,
+                                  actual: ActualGraphState(), capacity: 16)
+        let creates = ops.compactMap { op -> AppIdentity? in
+            if case .createTap(let id) = op { return id }
+            return nil
+        }
+        XCTAssertEqual(creates.count, 16)
+        let expected = audible.sorted { $0.canonicalBundleID < $1.canonicalBundleID }.prefix(16)
+        XCTAssertEqual(creates, Array(expected))
+    }
 }
