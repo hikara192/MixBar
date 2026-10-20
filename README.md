@@ -1,3 +1,5 @@
+**English** | [Русский](README.ru.md)
+
 # MixBar
 
 A small per-app volume mixer for the macOS menu bar.
