@@ -12,11 +12,24 @@ audio driver, no kernel extension, and nothing that needs admin rights.
 
 ## Install
 
-There is no notarized download yet, so you build it yourself. It takes about a
-minute.
+Grab the latest **DMG** from
+[Releases](https://github.com/hikara192/MixBar/releases/latest), open it, drag
+MixBar into Applications, and launch it. No terminal needed.
 
-**You need:** macOS 14.2 or newer and Xcode Command Line Tools. If `swift`
-is missing, run `xcode-select --install` first.
+The app is not notarized yet (that requires a paid Apple Developer account), so
+macOS may block the first launch. Allow it once:
+
+- right-click MixBar in Applications → **Open**, or
+- System Settings → Privacy & Security → **Open Anyway**.
+
+Then play something and allow **System Audio Recording** when asked.
+
+### Build from source
+
+If you prefer, or want to change something:
+
+**You need:** macOS 14.2 or newer and Xcode Command Line Tools. If `swift` is
+missing, run `xcode-select --install` first.
 
 ```bash
 git clone https://github.com/hikara192/MixBar.git
@@ -29,9 +42,8 @@ open /Applications/MixBar.app
 Prefer a ZIP? [Download the source](https://github.com/hikara192/MixBar/archive/refs/heads/main.zip),
 unzip it, then run the same commands inside the folder.
 
-The build is ad-hoc signed. That is fine for personal use, but macOS treats
-every rebuild as a new app, so you may have to allow audio capture again after
-rebuilding. A properly signed and notarized release is still on the list.
+A locally built app is ad-hoc signed too, so macOS treats each rebuild as a new
+app and may ask for audio permission again.
 
 ### First run
 
@@ -105,6 +117,7 @@ swift test                 # 45 tests: render, reconciler, settings, localizatio
 Scripts/check-deps.sh      # dependency and real-time purity checks
 
 Scripts/build-app.sh       # builds build/MixBar.app
+Scripts/make-dmg.sh        # builds build/MixBar-<version>.dmg for Releases
 Scripts/make-icon.sh       # regenerates the app icon
 ```
 
