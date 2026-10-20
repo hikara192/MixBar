@@ -35,6 +35,23 @@ final class MixerStore {
         graph.meter(for: id)
     }
 
+    func retryPermission() {
+        graph.submit(.retryPermission)
+    }
+
+    /// Opens the privacy pane where System Audio Recording lives. Pane IDs
+    /// differ between macOS releases, so try the known ones in order.
+    func openPrivacySettings() {
+        let candidates = [
+            "x-apple.systempreferences:com.apple.preference.security?Privacy_AudioCapture",
+            "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture",
+            "x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension",
+        ]
+        for string in candidates {
+            if let url = URL(string: string), NSWorkspace.shared.open(url) { return }
+        }
+    }
+
     func quit() {
         // Safe by design: HAL destroys process-owned taps on exit and
         // mutedWhenTapped auto-restores audio (never-silence invariant).

@@ -45,6 +45,11 @@ public final class GraphOwner: @unchecked Sendable {
     private var engineState: EngineState = .idle
     private var outputName: String?
     private var appNapActivity: NSObjectProtocol?
+    private var currentOutputID: AudioObjectID?
+    private var silentSince: Date?
+    private var permissionSuspected = false
+    private var permissionBlocked = false
+    private var retryNotBefore: Date?
 
     // MARK: - Init
 
@@ -85,6 +90,7 @@ public final class GraphOwner: @unchecked Sendable {
 
     public func submit(_ intent: MixerIntent) {
         queue.async {
+            self.retryNotBefore = nil   // user action retries immediately
             self.handle(intent)
             self.reconcile()
         }
@@ -120,13 +126,74 @@ public final class GraphOwner: @unchecked Sendable {
     // MARK: - Reconcile (queue-confined)
 
     private func reconcile() {
+        // Permission failure is sticky: retrying automatically would mute the
+        // affected apps again for seconds each cycle. Only an explicit
+        // retryPermission intent clears it.
+        if permissionBlocked { return }
+        // Backoff after a failed aggregate: retry at most every 5 s, or
+        // immediately on the next user intent (submit).
+        if let retry = retryNotBefore, Date() < retry { return }
+
         let apps = catalog.currentApps()
+        rebuildIfOutputChanged()
         let desired = settings.desiredState()
         let actual = ActualGraphState(taps: Set(taps.keys), hasAggregate: aggregate != nil)
         let ops = Reconciler.plan(desired: desired, audible: apps.map(\.identity),
                                   actual: actual, capacity: capacity)
         execute(ops, apps: apps)
+        updatePermissionHeuristic()
         publishSnapshot(apps: apps, desired: desired)
+    }
+
+    /// Output device changed (user switch, AirPods connect/disconnect): rebuild
+    /// the aggregate on the new default. Taps stay alive; only the rebuild
+    /// window is silent (ARCHITECTURE.md §8.4).
+    private func rebuildIfOutputChanged() {
+        guard !taps.isEmpty, aggregate != nil else { return }
+        guard let out = try? audio.defaultOutputDevice() else { return }
+        if let current = currentOutputID, current != out.id {
+            log.notice("default output changed to \(out.name, privacy: .public); rebuilding")
+            rebuildAggregate()
+        }
+    }
+
+    /// ADR-005 heuristic: there is no public permission preflight, so we detect
+    /// the common failure mode — taps exist, engine active, all slots silent
+    /// for >= 2 s. Runs at 1 Hz; false positives are possible (all managed apps
+    /// paused), so this drives a hint only, never an error path.
+    private func updatePermissionHeuristic() {
+        guard !usesFakeEngine, !taps.isEmpty, engineState == .active else {
+            silentSince = nil
+            permissionSuspected = false
+            return
+        }
+        var peak: Float = 0
+        slotLock.lock()
+        for slot in identitySlots.values where slot < capacity {
+            peak = max(peak, cat_slot_read_peak(slots + slot))
+        }
+        slotLock.unlock()
+
+        if peak < 0.0005 {
+            if silentSince == nil { silentSince = Date() }
+            if let since = silentSince {
+                let silentFor = Date().timeIntervalSince(since)
+                permissionSuspected = silentFor >= 2.0
+                // Safety valve (never-silence): taps muted an app but deliver
+                // nothing — most likely TCC denied. Tear the graph down so the
+                // app plays normally, and stop retrying until the user asks.
+                if silentFor >= 6.0 {
+                    log.error("taps silent for 6 s; tearing down (audio-capture permission?)")
+                    teardownAll()
+                    permissionBlocked = true
+                    permissionSuspected = true
+                    engineState = .failed(reason: "No audio from taps — allow System Audio Recording, then retry")
+                }
+            }
+        } else {
+            silentSince = nil
+            permissionSuspected = false
+        }
     }
 
     private func handle(_ intent: MixerIntent) {
@@ -139,7 +206,8 @@ public final class GraphOwner: @unchecked Sendable {
             let apps = catalog.currentApps()
             settings.setAllAppsGain(apps.map(\.identity), gain)
         case .retryPermission:
-            break   // skeleton: the 1 Hz poll re-attempts taps; onboarding UI is slice 3
+            permissionBlocked = false
+            retryNotBefore = nil
         case .shutdown:
             teardownAll()
         }
@@ -207,6 +275,8 @@ public final class GraphOwner: @unchecked Sendable {
             context.pointee.frameRate = format.sampleRate
             context.pointee.outputChannels = format.channels
             aggregate = agg
+            currentOutputID = output.id
+            retryNotBefore = nil
             engineState = .active
             beginAppNapActivity()
         } catch {
@@ -214,6 +284,7 @@ public final class GraphOwner: @unchecked Sendable {
             // Audio plays normally — control lost, never audio.
             log.error("aggregate failed: \(String(describing: error), privacy: .public)")
             teardownAll()
+            retryNotBefore = Date().addingTimeInterval(5)
             engineState = .failed(reason: String(describing: error))
         }
     }
@@ -221,6 +292,8 @@ public final class GraphOwner: @unchecked Sendable {
     private func teardownAggregate() {
         stopAndDestroyAggregate()
         clearSlots()
+        silentSince = nil
+        permissionSuspected = false
         engineState = .idle
     }
 
@@ -229,6 +302,7 @@ public final class GraphOwner: @unchecked Sendable {
         try? audio.stopRenderLoop(on: agg)
         try? audio.destroyAggregate(agg)
         aggregate = nil
+        currentOutputID = nil
         endAppNapActivity()
     }
 
@@ -238,6 +312,8 @@ public final class GraphOwner: @unchecked Sendable {
         taps = [:]
         degraded = []
         clearSlots()
+        silentSince = nil
+        permissionSuspected = false
         engineState = .idle
     }
 
@@ -279,7 +355,8 @@ public final class GraphOwner: @unchecked Sendable {
         snapshotLock.lock()
         snapshotValue = MixerSnapshot(engine: engineState, rows: rows,
                                       outputDeviceName: outputName,
-                                      usesFakeEngine: usesFakeEngine)
+                                      usesFakeEngine: usesFakeEngine,
+                                      permissionSuspected: permissionSuspected)
         snapshotLock.unlock()
     }
 

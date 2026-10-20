@@ -62,12 +62,17 @@ public struct MixerSnapshot: Sendable, Equatable {
     public let rows: [AppRow]
     public let outputDeviceName: String?
     public let usesFakeEngine: Bool
+    /// Heuristic (ADR-005): taps exist, engine is active, but every slot has
+    /// been silent for >= 2 s — most likely System Audio Recording is denied.
+    public let permissionSuspected: Bool
 
-    public init(engine: EngineState, rows: [AppRow], outputDeviceName: String?, usesFakeEngine: Bool) {
+    public init(engine: EngineState, rows: [AppRow], outputDeviceName: String?,
+                usesFakeEngine: Bool, permissionSuspected: Bool = false) {
         self.engine = engine
         self.rows = rows
         self.outputDeviceName = outputDeviceName
         self.usesFakeEngine = usesFakeEngine
+        self.permissionSuspected = permissionSuspected
     }
 }
 

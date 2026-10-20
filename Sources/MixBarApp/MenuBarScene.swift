@@ -9,11 +9,57 @@ struct MenuBarScene: View {
 
     var body: some View {
         VStack(spacing: 0) {
+            if case .failed(let reason) = store.snapshot.engine {
+                HStack(alignment: .top, spacing: 6) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text("MixBar paused — audio is normal").font(.caption).bold()
+                        Text(reason).font(.caption2).foregroundStyle(.secondary)
+                    }
+                    Spacer(minLength: 4)
+                    Button("Settings") { store.openPrivacySettings() }
+                        .buttonStyle(.link)
+                        .font(.caption)
+                    Button("Retry") { store.retryPermission() }
+                        .buttonStyle(.link)
+                        .font(.caption)
+                }
+                .padding(8)
+                .background(RoundedRectangle(cornerRadius: 6).fill(.red.opacity(0.12)))
+                .padding(.bottom, 6)
+            } else if store.snapshot.permissionSuspected {
+                HStack(alignment: .top, spacing: 6) {
+                    Image(systemName: "waveform.slash")
+                        .font(.caption)
+                        .foregroundStyle(.yellow)
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text("No audio detected")
+                            .font(.caption).bold()
+                        Text("If an app is silent, allow System Audio Recording for MixBar in System Settings.")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer(minLength: 4)
+                    Button("Settings") { store.openPrivacySettings() }
+                        .buttonStyle(.link)
+                        .font(.caption)
+                }
+                .padding(8)
+                .background(RoundedRectangle(cornerRadius: 6).fill(.yellow.opacity(0.12)))
+                .padding(.bottom, 6)
+            }
             if store.snapshot.rows.isEmpty {
-                Text("Nothing is playing audio")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                    .padding(.vertical, 24)
+                VStack(spacing: 4) {
+                    Text("Nothing is playing audio")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                    Text("Apps appear here while they produce sound.")
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                }
+                .padding(.vertical, 24)
             } else {
                 ForEach(store.snapshot.rows) { row in
                     RowView(store: store, row: row)

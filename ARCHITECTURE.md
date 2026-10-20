@@ -611,7 +611,16 @@ UserDefaults key `mixbar.settings.v1`, JSON-encoded, written debounced 500 ms af
 | S3 | TCC: trigger, deny, silence; re-prompt after reset; no public preflight | heuristic reproducible; re-prompt works |
 | S4 | AirPods HFP: rates, aggregate survival, tap survival across output change (A5) | exact degrade path chosen |
 
-**Walking skeleton (end of week 1):** app in the menu bar, FakeAudioSystem-driven rows, gain slider wired to RenderCore through the real SlotTable — no Core Audio yet. Proves control-plane and data-plane plumbing.
+**Status 2026-10-20 — S1 passed** (`Sources/MixBarSpike`): tap on a live `afplay`
+process, private aggregate on the built-in speakers, one IOProc; tap format
+48 kHz/2 ch/float32, aggregate 44.1 kHz; input and output each one interleaved
+stereo buffer (512 frames); measured out/in ratio 1.000 → 0.500 → 0.000 → 1.000
+across gain phases. Remaining: crash restore, flash-window and latency numbers
+(S1), then S2–S4. Real engine is now the app default; `MIXBAR_ENGINE=fake`
+keeps the synthetic demo path.
+
+**Walking skeleton (done):** app in the menu bar, gain slider wired to RenderCore
+through the real slot table, then real discovery and real taps on top.
 
 **Vertical slices:**
 

@@ -6,22 +6,37 @@ kext, no admin rights.
 
 Full design, ADRs and fitness functions: **[ARCHITECTURE.md](ARCHITECTURE.md)**.
 
-## Status: walking skeleton
+## Status: real per-app control works
 
-The control plane and the data plane are real and covered by tests. The Core
-Audio backend compiles against the SDK but has not been runtime-validated yet
-(that is what the spikes are for).
+Real Core Audio is the default engine. Spike S1 validated the whole path on
+live audio: process tap, private aggregate, IOProc, buffer layout
+(interleaved stereo), and gain reaching the output exactly
+(out/in = 1.000 → 0.500 → 0.000 → 1.000).
 
 | Layer | State |
 |---|---|
 | `RenderCore` + slot table (RT mixing, ramps, clamp, peaks) | **real**, tested |
 | `GraphOwner` + `Reconciler` (single writer, idempotent reconcile) | **real**, tested |
-| `SettingsStore`, discovery model, menu bar UI | **real**, tested |
-| `FakeAudioSystem` — drives the real `RenderCore` with synthetic tap buffers | **real**, default engine |
-| `CoreAudioSystem` — process taps, private aggregate, IOProc | compiles, **unvalidated** |
+| `SettingsStore`, discovery, menu bar UI | **real**, tested |
+| `CoreAudioSystem` — process taps, private aggregate, IOProc | **real**, S1-validated |
+| `FakeAudioSystem` — synthetic buffers through the real render core | **real**, demo/CI engine |
 
-Default engine is `fake`: the menu bar app is fully functional, the meters are
-driven by the real render path, but no audio is touched.
+## Using it
+
+1. Play audio in an app (Music, Spotify, a browser tab, …).
+2. Open MixBar from the menu bar: apps appear while they produce sound.
+3. Move a slider. On the first tap macOS asks for **System Audio Recording**
+   permission — allow it. From then on the slider actually changes that app's
+   volume and the meter shows its real level.
+4. Slider back to 100% releases the app: the tap is destroyed and playback is
+   bit-perfect again.
+
+Safety valve: if taps are created but deliver no audio for 6 s (the usual
+signature of denied permission), MixBar removes them, leaves audio untouched,
+and shows a "MixBar paused" banner with Settings / Retry.
+
+Engine override: `MIXBAR_ENGINE=fake open build/MixBar.app` runs the UI on
+synthetic audio with no permission prompt.
 
 ## Build and run
 
@@ -33,10 +48,8 @@ Scripts/build-app.sh           # -> build/MixBar.app (LSUIElement, menu bar only
 open build/MixBar.app
 ```
 
-Engine selection: `MIXBAR_ENGINE=fake|core` (default `fake`).
-`core` switches to the real Core Audio backend — enable it only after the
-spikes below pass, and expect the System Audio Recording permission prompt on
-the first slider adjustment.
+Engine selection: `MIXBAR_ENGINE=core|fake` (default `core`).
+`fake` runs the same UI and the same render core on synthetic buffers.
 
 ## Tests
 
@@ -78,8 +91,9 @@ Spikes/                        S1–S4, Week 0 (throwaway)
 4. **The RT path allocates nothing, locks nothing, logs nothing** — state
    crosses the boundary through C11 atomics only.
 
-## Next step: Week-0 spikes
+## Spikes
 
-See [Spikes/README.md](Spikes/README.md). S1 (tap + aggregate + IOProc
-end-to-end, crash restore, flash window, latency) gates the switch to
-`MIXBAR_ENGINE=core`.
+S1 is done: taps, aggregate, IOProc, buffer layout and gain are validated.
+Still open (see [Spikes/README.md](Spikes/README.md)): S2 tap add/remove
+mid-playback and buffer↔slot mapping under multiple taps, S3 permission
+matrix and re-prompt behavior, S4 AirPods HFP format changes.
