@@ -172,6 +172,25 @@ final class RenderCoreTests: XCTestCase {
         XCTAssertEqual(cat_slot_read_peak(g.slots + 0), 0.4, accuracy: 1e-5)
     }
 
+    func test_inputPeakTracksPreGainInputWhenMuted() {
+        let g = makeGraph(active: 1)
+        defer { g.deallocate() }
+        setSlot(g, 0, target: 0, current: 0)   // muted / 0%
+
+        let input = InterleavedBufferList(bufferCount: 1, frames: 64, channels: 2)
+        fill(input, buffer: 0, value: 0.8)
+        let output = InterleavedBufferList(bufferCount: 1, frames: 64, channels: 2)
+
+        _ = RenderCore.render(g.context, input: input.list, output: output.list)
+
+        // Output is silent (user asked for mute), but the tap is alive: the
+        // pre-gain peak must stay non-zero so the permission heuristic does
+        // not mistake a mute for a dead capture.
+        XCTAssertEqual(cat_slot_read_peak(g.slots + 0), 0, accuracy: 1e-6)
+        XCTAssertEqual(cat_slot_read_input_peak(g.slots + 0), 0.8, accuracy: 1e-5)
+        XCTAssertEqual(output.channelData(buffer: 0)[0], 0, accuracy: 1e-9)
+    }
+
     func test_inactiveSlotsAreIgnored() {
         let g = makeGraph(capacity: 4, active: 1)
         defer { g.deallocate() }

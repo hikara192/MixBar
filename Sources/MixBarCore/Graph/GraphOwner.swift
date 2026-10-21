@@ -135,32 +135,44 @@ public final class GraphOwner: @unchecked Sendable {
         if let retry = retryNotBefore, Date() < retry { return }
 
         let apps = catalog.currentApps()
-        rebuildIfOutputChanged()
+        refreshOutputDevice()
         let desired = settings.desiredState()
         let actual = ActualGraphState(taps: Set(taps.keys), hasAggregate: aggregate != nil)
-        let ops = Reconciler.plan(desired: desired, audible: apps.map(\.identity),
+        // Only apps that are actually outputting get a tap: silent apps stay
+        // in the list with their saved volume, and are tapped on next sound.
+        let audible = apps.filter(\.isAudible).map(\.identity)
+        let ops = Reconciler.plan(desired: desired, audible: audible,
                                   actual: actual, capacity: capacity)
         execute(ops, apps: apps)
         updatePermissionHeuristic()
         publishSnapshot(apps: apps, desired: desired)
     }
 
-    /// Output device changed (user switch, AirPods connect/disconnect): rebuild
-    /// the aggregate on the new default. Taps stay alive; only the rebuild
+    /// Keep the UI's output-device name fresh even when nothing is being mixed.
+    /// Previously the name was only learned while building the aggregate, so an
+    /// idle graph showed "No output device" on a perfectly fine Mac.
+    ///
+    /// If the output changed (user switch, AirPods connect/disconnect) and
+    /// taps are live, rebuild the aggregate. Taps stay alive; only the rebuild
     /// window is silent (ARCHITECTURE.md §8.4).
-    private func rebuildIfOutputChanged() {
-        guard !taps.isEmpty, aggregate != nil else { return }
+    private func refreshOutputDevice() {
         guard let out = try? audio.defaultOutputDevice() else { return }
-        if let current = currentOutputID, current != out.id {
-            log.notice("default output changed to \(out.name, privacy: .public); rebuilding")
-            rebuildAggregate()
-        }
+        outputName = out.name
+        guard !taps.isEmpty, aggregate != nil,
+              let current = currentOutputID, current != out.id else { return }
+        log.notice("default output changed to \(out.name, privacy: .public); rebuilding")
+        rebuildAggregate()
     }
 
     /// ADR-005 heuristic: there is no public permission preflight, so we detect
     /// the common failure mode — taps exist, engine active, all slots silent
     /// for >= 2 s. Runs at 1 Hz; false positives are possible (all managed apps
     /// paused), so this drives a hint only, never an error path.
+    ///
+    /// The silence is measured **before** the mixer gain: muting an app (or
+    /// setting it to 0%) silences our output, but the tap still delivers audio
+    /// and must not look like a dead capture. If every managed slot is
+    /// intentionally silenced, silence is expected and the heuristic is off.
     private func updatePermissionHeuristic() {
         guard !usesFakeEngine, !taps.isEmpty, engineState == .active else {
             silentSince = nil
@@ -168,32 +180,61 @@ public final class GraphOwner: @unchecked Sendable {
             return
         }
         var peak: Float = 0
+        var anyTargetOpen = false
         slotLock.lock()
         for slot in identitySlots.values where slot < capacity {
-            peak = max(peak, cat_slot_read_peak(slots + slot))
+            peak = max(peak, cat_slot_read_input_peak(slots + slot))
+            if cat_slot_get_target(slots + slot) > 0 { anyTargetOpen = true }
         }
         slotLock.unlock()
 
-        if peak < 0.0005 {
-            if silentSince == nil { silentSince = Date() }
-            if let since = silentSince {
-                let silentFor = Date().timeIntervalSince(since)
-                permissionSuspected = silentFor >= 2.0
-                // Safety valve (never-silence): taps muted an app but deliver
-                // nothing — most likely TCC denied. Tear the graph down so the
-                // app plays normally, and stop retrying until the user asks.
-                if silentFor >= 6.0 {
-                    log.error("taps silent for 6 s; tearing down (audio-capture permission?)")
-                    teardownAll()
-                    permissionBlocked = true
-                    permissionSuspected = true
-                    engineState = .failed(reason: "No audio from taps — allow System Audio Recording, then retry")
-                }
-            }
-        } else {
-            silentSince = nil
-            permissionSuspected = false
+        let step = Self.permissionHeuristicStep(inputPeak: peak,
+                                               anyTargetOpen: anyTargetOpen,
+                                               silentSince: silentSince,
+                                               now: Date())
+        silentSince = step.silentSince
+        permissionSuspected = step.permissionSuspected
+
+        // Safety valve (never-silence): taps muted an app but deliver
+        // nothing — most likely TCC denied. Tear the graph down so the
+        // app plays normally, and stop retrying until the user asks.
+        if step.shouldTeardown {
+            log.error("taps silent for 6 s; tearing down (audio-capture permission?)")
+            teardownAll()
+            permissionBlocked = true
+            permissionSuspected = true
+            engineState = .failed(reason: "No audio from taps — allow System Audio Recording, then retry")
         }
+    }
+
+    /// Pure heuristic state transition (tested without a 1 Hz timer).
+    /// `inputPeak` is the pre-gain tap level; `anyTargetOpen` is false when
+    /// every managed app is deliberately muted/at 0%.
+    struct PermissionHeuristicStep: Equatable {
+        var silentSince: Date?
+        var permissionSuspected: Bool
+        var shouldTeardown: Bool
+    }
+
+    static func permissionHeuristicStep(inputPeak: Float, anyTargetOpen: Bool,
+                                        silentSince: Date?,
+                                        now: Date) -> PermissionHeuristicStep {
+        // Intentional silence (all apps muted): never a permission failure.
+        guard anyTargetOpen else {
+            return PermissionHeuristicStep(silentSince: nil,
+                                           permissionSuspected: false,
+                                           shouldTeardown: false)
+        }
+        guard inputPeak < 0.0005 else {
+            return PermissionHeuristicStep(silentSince: nil,
+                                           permissionSuspected: false,
+                                           shouldTeardown: false)
+        }
+        let since = silentSince ?? now
+        let silentFor = now.timeIntervalSince(since)
+        return PermissionHeuristicStep(silentSince: since,
+                                       permissionSuspected: silentFor >= 2.0,
+                                       shouldTeardown: silentFor >= 6.0)
     }
 
     private func handle(_ intent: MixerIntent) {
@@ -328,6 +369,16 @@ public final class GraphOwner: @unchecked Sendable {
         slotLock.lock()
         identitySlots = Dictionary(uniqueKeysWithValues: bounded.enumerated().map { ($1, $0) })
         slotLock.unlock()
+        // The render loop is stopped here, so stale published levels cannot
+        // race. Without this a new slot mapping could briefly inherit the
+        // previous app's peak — and the permission heuristic could read a
+        // stale non-zero input level as "the tap is alive".
+        for i in 0..<capacity {
+            cat_slot_publish_peak(slots + i, 0)
+            cat_slot_publish_input_peak(slots + i, 0)
+            (slots + i).pointee.peak = 0
+            (slots + i).pointee.input_peak = 0
+        }
         cat_flag_set(activeSlots, UInt32(bounded.count))
     }
 
@@ -341,7 +392,13 @@ public final class GraphOwner: @unchecked Sendable {
     // MARK: - Snapshot
 
     private func publishSnapshot(apps: [DiscoveredApp], desired: [AppIdentity: DesiredApp]) {
-        let rows = apps.map { app -> AppRow in
+        // Audible apps first: they are what the user is usually looking for.
+        let ordered = apps.sorted { lhs, rhs in
+            if lhs.isAudible != rhs.isAudible { return lhs.isAudible }
+            if lhs.displayName != rhs.displayName { return lhs.displayName < rhs.displayName }
+            return lhs.identity.canonicalBundleID < rhs.identity.canonicalBundleID
+        }
+        let rows = ordered.map { app -> AppRow in
             let state: AppRowState
             if degraded.contains(app.identity) {
                 state = .degraded(reason: "tap unavailable")
@@ -351,9 +408,10 @@ public final class GraphOwner: @unchecked Sendable {
                 state = .unmanaged
             }
             return AppRow(identity: app.identity, displayName: app.displayName,
-                          isAudible: true, rowState: state,
+                          isAudible: app.isAudible, rowState: state,
                           desired: desired[app.identity] ?? DesiredApp())
         }
+        log.debug("snapshot rows=\(rows.count, privacy: .public) apps=\(apps.count, privacy: .public) output=\(self.outputName ?? "-", privacy: .public)")
         snapshotLock.lock()
         snapshotValue = MixerSnapshot(engine: engineState, rows: rows,
                                       outputDeviceName: outputName,

@@ -76,6 +76,56 @@ final class GraphOwnerEndToEndTests: XCTestCase {
         XCTAssertEqual(graph.snapshot().engine, .active)
     }
 
+    func test_outputDeviceIsVisibleWhileIdle() async throws {
+        let suite = "mixbar-e2e-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defaults.removePersistentDomain(forName: suite)
+        let graph = GraphOwner(audioSystem: FakeAudioSystem(),
+                               catalog: FakeProcessCatalog(),
+                               settings: SettingsStore(defaults: defaults),
+                               fakeEngine: true)
+        defer { graph.shutdown() }
+
+        // Regression: the name used to be learned only while building the
+        // aggregate, so an idle graph displayed "No output device".
+        let visible = try await pollUntil(timeout: 2.0) {
+            let snapshot = graph.snapshot()
+            return snapshot.engine == .idle
+                && snapshot.outputDeviceName == "Fake Output"
+        }
+        XCTAssertTrue(visible, "idle graph should still report the output device")
+    }
+
+    func test_silentAppsStayListedWithoutTap() async throws {
+        let suite = "mixbar-e2e-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defaults.removePersistentDomain(forName: suite)
+        let graph = GraphOwner(audioSystem: FakeAudioSystem(),
+                               catalog: FakeProcessCatalog(),
+                               settings: SettingsStore(defaults: defaults),
+                               fakeEngine: true)
+        defer { graph.shutdown() }
+
+        let music = AppIdentity(canonicalBundleID: "com.apple.Music")
+
+        // Paused player is listed, marked silent, and has no tap.
+        let listed = try await pollUntil(timeout: 3.0) {
+            graph.snapshot().rows.contains {
+                $0.identity == music && !$0.isAudible && $0.rowState == .unmanaged
+            }
+        }
+        XCTAssertTrue(listed, "silent apps should stay in the panel")
+
+        // Setting a volume for a silent app persists the intent but does not
+        // create a tap or an aggregate until it actually plays.
+        graph.submit(.setGain(music, 0.3))
+        try await Task.sleep(for: .milliseconds(300))
+        XCTAssertEqual(graph.snapshot().engine, .idle)
+        XCTAssertTrue(graph.snapshot().rows.contains {
+            $0.identity == music && $0.rowState == .unmanaged && abs($0.desired.gain - 0.3) < 0.001
+        })
+    }
+
     private func pollUntil(timeout: TimeInterval, _ condition: @escaping () -> Bool) async throws -> Bool {
         let deadline = Date().addingTimeInterval(timeout)
         while Date() < deadline {

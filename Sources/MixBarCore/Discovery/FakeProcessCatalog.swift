@@ -1,7 +1,8 @@
 import Foundation
 import CoreAudio
 
-/// Static fake catalog for the walking skeleton: three apps producing audio.
+/// Static fake catalog for the walking skeleton: three apps producing audio
+/// plus one paused player that must still be listed.
 public final class FakeProcessCatalog: ProcessCataloging, @unchecked Sendable {
     public init() {}
 
@@ -27,6 +28,14 @@ public final class FakeProcessCatalog: ProcessCataloging, @unchecked Sendable {
                     DiscoveredProcess(objectID: 1004, pid: 504, bundleID: "com.google.Chrome", isRunningOutput: true),
                     DiscoveredProcess(objectID: 1005, pid: 505, bundleID: "com.google.Chrome.helper", isRunningOutput: true),
                 ]),
+            // Silent app: has an audio client but is not outputting right now.
+            DiscoveredApp(
+                identity: AppIdentity(canonicalBundleID: "com.apple.Music"),
+                displayName: "Music",
+                processes: [
+                    DiscoveredProcess(objectID: 1006, pid: 506, bundleID: "com.apple.Music", isRunningOutput: false),
+                ],
+                isAudible: false),
         ]
     }
 }

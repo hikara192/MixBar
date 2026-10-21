@@ -59,8 +59,10 @@ then hit **Retry** in the MixBar panel.
 
 ## Using it
 
-Only apps that are currently making sound appear in the panel. Pause the music
-and it disappears; start it again and it comes back.
+The panel lists audio-capable apps currently running on your Mac, even while
+they are silent, so you can set their volume in advance. MixBar itself and
+background system agents (Control Center, Notification Center, Siri, …) never
+appear. Silent rows are dimmed and show a crossed-out waveform.
 
 - **Slider** — per-app volume from 0 to 100%.
 - **Speaker button** — mute or unmute that app.

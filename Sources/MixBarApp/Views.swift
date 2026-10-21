@@ -102,7 +102,7 @@ struct RowView: View {
                 HStack(spacing: 4) {
                     Text(row.displayName)
                         .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(row.desired.muted ? Color.secondary : Color.primary)
+                        .foregroundStyle(row.desired.muted || !row.isAudible ? Color.secondary : Color.primary)
                         .lineLimit(1)
                         .truncationMode(.tail)
 
@@ -112,6 +112,14 @@ struct RowView: View {
                             .foregroundStyle(.orange)
                             .help(l10n.t(.degradedHelp, reason))
                             .accessibilityLabel(l10n.t(.degradedA11y, reason))
+                    }
+
+                    if !row.isAudible {
+                        Image(systemName: "waveform.slash")
+                            .font(.system(size: 9, weight: .semibold))
+                            .foregroundStyle(.tertiary)
+                            .help(l10n.t(.silentApp))
+                            .accessibilityLabel(l10n.t(.silentApp))
                     }
 
                     Spacer(minLength: 4)

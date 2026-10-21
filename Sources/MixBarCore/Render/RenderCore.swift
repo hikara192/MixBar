@@ -106,8 +106,16 @@ public enum RenderCore {
                 let inL = ld.assumingMemoryBound(to: Float.self)
                 let inR = rd.assumingMemoryBound(to: Float.self)
                 let idx = inInterleaved ? 2 * f : f
-                let l = inL[idx] * gain
-                let r = inR[idx] * gain
+                let rawL = inL[idx]
+                let rawR = inR[idx]
+
+                // Pre-gain level: the permission heuristic must see that a
+                // tap is alive even when the user muted the slot (gain 0).
+                let inputMag = max(abs(rawL), abs(rawR))
+                if inputMag > slot.pointee.input_peak { slot.pointee.input_peak = inputMag }
+
+                let l = rawL * gain
+                let r = rawR * gain
                 sumL += l
                 sumR += r
 
@@ -119,11 +127,14 @@ public enum RenderCore {
             outR[o] = min(1, max(-1, sumR))
         }
 
-        // Publish per-slot peaks for the UI meters (lock-free).
+        // Publish per-slot peaks (lock-free): post-gain for the UI meters,
+        // pre-gain for the permission heuristic.
         for s in 0..<active {
             let slot = ctx.pointee.slots + s
             cat_slot_publish_peak(slot, slot.pointee.peak)
+            cat_slot_publish_input_peak(slot, slot.pointee.input_peak)
             slot.pointee.peak = 0
+            slot.pointee.input_peak = 0
         }
         return noErr
     }

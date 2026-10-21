@@ -2,7 +2,7 @@
 
 **Status:** Proposed · **Date:** 2026-10-19 · **Updated:** 2026-10-20 · **Minimum macOS:** 14.2 (ADR-008) · **Scope:** MVP · **Implementation:** walking skeleton complete (see README)
 
-MixBar is a menu-bar per-app volume mixer for macOS: it lists every application currently producing audio and gives each an independent volume and mute — with no audio driver, no admin rights, no kext, and without ever becoming the system output device.
+MixBar is a menu-bar per-app volume mixer for macOS: it lists the audio-capable user-facing applications running on the Mac (even while silent), never background agents or itself, and gives each an independent volume and mute — with no audio driver, no admin rights, no kext, and without ever becoming the system output device.
 
 ---
 
@@ -153,11 +153,13 @@ flowchart TB
 
 **Decision.** Grouping key = canonical bundle ID:
 
-1. `NSRunningApplication(processIdentifier:)` → `bundleIdentifier`.
-2. If nil, or the bundle ID matches a known helper pattern (`*Helper*`, `*helper*`, `*Renderer*`), walk the parent PID chain (sysctl `kinfo_proc` `p_ppid`) until an `NSRunningApplication` with a regular, non-agent app is found.
-3. System daemons without a resolvable owning app are hidden.
-4. Pro-audio hosts (Logic, Ableton, Pro Tools) and known system audio helpers are excluded by an editable bundle-ID list.
-5. Ambiguous grouping → one row per resolved top app; ambiguity never blocks audio.
+1. Core Audio process object → PID → `proc_pidpath` → outermost `.app` bundle (no LaunchServices, so the graph queue never blocks on `activationPolicy`; `NSWorkspace` performs a synchronous XPC round-trip).
+2. Nested helpers (Electron renderers, WebKit/XPC services, menu-bar player helpers) group under that outermost app bundle.
+3. `Info.plist` is read directly (`CFBundleIdentifier`, `CFBundleDisplayName`, `LSUIElement`, `LSBackgroundOnly`) and cached per bundle path.
+4. User-installed apps, including third-party menu-bar players, are kept. System apps are kept only from `/System/Applications` (including the cryptex mount) and only when user-facing; Control Center, Notification Center, Siri and other system agents are hidden.
+5. MixBar excludes its own PID/bundle. Processes without an owning `.app` are hidden.
+6. Pro-audio hosts (Logic, Ableton, Pro Tools) and known system audio helpers are excluded by an editable bundle-ID list.
+7. Ambiguous grouping → one row per resolved top app; ambiguity never blocks audio.
 
 `responsibility_get_pid_responsible_for_pid` (private API) is **not** in the core path: phase-2 optional flag with automatic fallback to the parent-chain walk, ADR'd separately.
 
@@ -179,7 +181,7 @@ flowchart TB
 
 **Context.** Taps return digital silence when "System Audio Recording Only" is denied; no public API reports the status.
 
-**Decision.** Onboarding before the first tap: explain the permission, then the user's first adjustment *is* the trigger — the TCC prompt appears contextually. Detection heuristic: if every managed tap reads absolute silence for ≥ 2 s while ≥ 1 tapped process reports `IsRunningOutput`, show a dismissible banner with a button that opens Privacy & Security and a Retry that recreates the taps (re-triggering the prompt).
+**Decision.** Onboarding before the first tap: explain the permission, then the user's first adjustment *is* the trigger — the TCC prompt appears contextually. Detection heuristic: if every managed tap reads absolute silence for ≥ 2 s while ≥ 1 tapped process reports `IsRunningOutput`, show a dismissible banner with a button that opens Privacy & Security and a Retry that recreates the taps (re-triggering the prompt). Silence is measured **before** the mixer gain (`input_peak`, not `peak`), and the heuristic is disabled when every managed slot is intentionally muted/at 0% — otherwise muting an app would look like a dead tap and the safety valve would pause MixBar.
 
 **Consequences.** No private `TCCAccessPreflight` in the core path. The heuristic can false-positive only when all managed apps are simultaneously silent-but-running — and it only shows a banner, it never disables audio. Known limitation: DRM audio is silent per-tap while others play, hence the "all taps zero" condition.
 
@@ -321,8 +323,10 @@ protocol AudioSystem: Sendable {
 typedef struct {
     _Atomic uint16_t target_milli;  // 0...1000, control plane writes
     uint32_t current_milli;         // ramp state, RT only
-    float peak;                     // per-call peak, RT only
-    _Atomic uint32_t peak_shared;   // published peak (float bits), UI reads
+    float peak;                     // per-call post-gain peak, RT only
+    _Atomic uint32_t peak_shared;   // published output peak (float bits), UI reads
+    float input_peak;               // per-call pre-gain peak, RT only
+    _Atomic uint32_t input_peak_shared; // published input peak, heuristic reads
 } cat_slot_t;
 
 typedef struct { _Atomic uint32_t value; } cat_flag_t;  // current tap count

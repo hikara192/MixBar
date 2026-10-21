@@ -95,9 +95,10 @@ final class MixerStore {
     }
 
     /// Global-hotkey action: mute every audible app if at least one is
-    /// unmuted, otherwise unmute all of them.
+    /// unmuted, otherwise unmute all of them. Silent rows are ignored so
+    /// they cannot flip the toggle direction.
     func toggleMuteAll() {
-        let rows = snapshot.rows
+        let rows = snapshot.rows.filter(\.isAudible)
         guard !rows.isEmpty else { return }
         let shouldMute = rows.contains { !$0.desired.muted }
         for row in rows {
